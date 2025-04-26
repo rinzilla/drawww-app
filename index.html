@@ -2,132 +2,169 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="telegram-web-app-bot-integration" content="true">
     <title>Telegram Рисовалка</title>
     <style>
-        body { margin: 0; padding: 0; }
-        canvas { 
-            display: block; 
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+        }
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
             background: white;
             touch-action: none;
-            width: 100vw;
-            height: calc(100vh - 60px);
         }
         .controls {
-            padding: 10px;
-            background: #f5f5f5;
+            position: fixed;
+            bottom: 10px;
+            left: 0;
+            right: 0;
             display: flex;
-            justify-content: space-between;
+            justify-content: space-around;
+            padding: 10px;
+            background: rgba(255,255,255,0.8);
         }
         button {
-            padding: 8px 15px;
+            padding: 10px 20px;
             background: #0088cc;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 20px;
             font-size: 16px;
         }
     </style>
 </head>
 <body>
-    <canvas id="drawingCanvas"></canvas>
+    <div id="canvas-container">
+        <canvas id="drawingCanvas"></canvas>
+    </div>
     <div class="controls">
         <button id="clearBtn">Очистить</button>
-        <button id="saveBtn">Сохранить в чат</button>
+        <button id="saveBtn">Сохранить</button>
     </div>
 
     <script>
+        // Инициализация Telegram WebApp
+        const tgWebApp = window.Telegram?.WebApp;
+        if (tgWebApp) {
+            tgWebApp.ready();
+            tgWebApp.expand();
+            tgWebApp.setHeaderColor("#0088cc");
+            tgWebApp.setBackgroundColor("#ffffff");
+        }
+
+        // Настройка холста
         const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
         let isDrawing = false;
-        
-        // Настройка холста
+        let lastX = 0;
+        let lastY = 0;
+
         function resizeCanvas() {
-            const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
-            canvas.width = size;
-            canvas.height = size;
-            redraw();
-        }
-        
-        function redraw() {
-            // Очищаем и перерисовываем (можно добавить сохранение состояния)
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-        
-        // Инициализация Telegram WebApp
-        function initTelegram() {
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.ready();
-                Telegram.WebApp.expand();
-                Telegram.WebApp.setHeaderColor("#0088cc");
-                Telegram.WebApp.setBackgroundColor("#ffffff");
-                return true;
-            }
-            return false;
-        }
-        
-        // Рисование
-        function setupDrawing() {
-            canvas.addEventListener('pointerdown', startDrawing);
-            canvas.addEventListener('pointermove', draw);
-            canvas.addEventListener('pointerup', stopDrawing);
-            canvas.addEventListener('pointerout', stopDrawing);
+            const width = window.innerWidth;
+            const height = window.innerHeight;
             
-            function startDrawing(e) {
-                isDrawing = true;
-                ctx.beginPath();
-                const rect = canvas.getBoundingClientRect();
-                ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-                ctx.lineWidth = 5;
-                ctx.strokeStyle = '#000000';
-                ctx.lineCap = 'round';
-            }
+            // Учет масштабирования экрана
+            const scale = window.devicePixelRatio || 1;
+            canvas.width = width * scale;
+            canvas.height = height * scale;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
             
-            function draw(e) {
-                if (!isDrawing) return;
-                const rect = canvas.getBoundingClientRect();
-                ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-                ctx.stroke();
-            }
-            
-            function stopDrawing() {
-                isDrawing = false;
-            }
+            ctx.scale(scale, scale);
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#000000';
         }
-        
-        // Управление
-        function setupControls() {
+
+        // Корректное получение позиции касания
+        function getTouchPos(canvasDom, touchEvent) {
+            const rect = canvasDom.getBoundingClientRect();
+            const scaleX = canvasDom.width / rect.width;
+            const scaleY = canvasDom.height / rect.height;
+            
+            return {
+                x: (touchEvent.clientX - rect.left) * scaleX,
+                y: (touchEvent.clientY - rect.top) * scaleY
+            };
+        }
+
+        // Обработчики событий
+        function startDrawing(e) {
+            isDrawing = true;
+            const pos = getTouchPos(canvas, e);
+            [lastX, lastY] = [pos.x, pos.y];
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            
+            const pos = getTouchPos(canvas, e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            [lastX, lastY] = [pos.x, pos.y];
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        // Инициализация
+        function init() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Для мыши
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+            
+            // Для сенсорных устройств
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startDrawing(e.touches[0]);
+            });
+            
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                draw(e.touches[0]);
+            });
+            
+            canvas.addEventListener('touchend', stopDrawing);
+            
+            // Кнопки управления
             document.getElementById('clearBtn').addEventListener('click', () => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             });
             
             document.getElementById('saveBtn').addEventListener('click', () => {
                 const dataURL = canvas.toDataURL('image/png');
-                
-                if (initTelegram()) {
-                    Telegram.WebApp.sendData(dataURL);
-                    Telegram.WebApp.close();
+                if (tgWebApp) {
+                    tgWebApp.sendData(dataURL);
+                    tgWebApp.close();
                 } else {
-                    alert("Пожалуйста, используйте мини-приложение в Telegram");
+                    alert("Для сохранения откройте в Telegram");
                 }
             });
         }
-        
-        // Инициализация
-        function init() {
-            resizeCanvas();
-            setupDrawing();
-            setupControls();
-            window.addEventListener('resize', resizeCanvas);
-            
-            if (!initTelegram()) {
-                document.body.style.backgroundColor = "#f0f0f0";
-                alert("Для лучшего опыта откройте в Telegram");
-            }
-        }
-        
+
         init();
     </script>
 </body>
