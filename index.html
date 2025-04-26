@@ -3,122 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Критически важный тег -->
     <meta name="telegram-web-app-bot-integration" content="true">
     <title>Telegram Рисовалка</title>
     <style>
         body { margin:0; padding:0; overflow:hidden; background:#fff; }
         canvas { display:block; width:100vw; height:100vh; touch-action:none; }
-        .controls { position:fixed; bottom:20px; left:0; right:0; text-align:center; }
-        button { padding:12px 24px; background:#0088cc; color:#fff; border:none; border-radius:20px; margin:0 10px; }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
-    <div class="controls">
-        <button id="clear">Очистить</button>
-        <button id="save">Сохранить</button>
-    </div>
 
     <script>
-        // Блокировка открытия вне Telegram
-        if (!window.Telegram?.WebApp?.initData) {
+        // Проверка, что открыто внутри Telegram WebView
+        function isTelegramWebApp() {
+            return window.Telegram && Telegram.WebApp && Telegram.WebApp.initData;
+        }
+
+        // Если открыто не в Telegram - показываем инструкцию
+        if (!isTelegramWebApp()) {
             document.body.innerHTML = `
                 <div style="padding:20px;text-align:center;">
                     <h2>Откройте через Telegram-бота</h2>
-                    <p>Используйте кнопку в боте для запуска</p>
+                    <p>1. Перейдите в чат с ботом</p>
+                    <p>2. Нажмите кнопку "🎨 Открыть рисовалку"</p>
                 </div>
             `;
-            throw new Error("Open in Telegram only");
+            throw new Error("Open via Telegram bot only");
         }
 
         // Инициализация Telegram WebApp
-        const tgWebApp = Telegram.WebApp;
-        tgWebApp.ready();
-        tgWebApp.expand();
-        tgWebApp.setHeaderColor("#0088cc");
-        tgWebApp.setBackgroundColor("#ffffff");
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        Telegram.WebApp.setHeaderColor("#0088cc");
+        Telegram.WebApp.setBackgroundColor("#ffffff");
 
-        // Настройка Canvas
+        // Остальной код рисовалки...
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        let isDrawing = false;
         
-        function resizeCanvas() {
+        // Настройка canvas и обработчиков событий
+        function init() {
             const dpr = window.devicePixelRatio || 1;
             canvas.width = window.innerWidth * dpr;
             canvas.height = window.innerHeight * dpr;
-            canvas.style.width = '100%';
-            canvas.style.height = '100%';
             ctx.scale(dpr, dpr);
-            ctx.lineWidth = 5;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#000';
-            ctx.imageSmoothingEnabled = true;
+            
+            // Добавьте здесь код рисования...
         }
 
-        // Плавное рисование
-        function draw(e) {
-            if (!isDrawing) return;
-            
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-            
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-        }
-
-        // Инициализация событий
-        function initEvents() {
-            // Для мыши и касаний
-            const startDrawing = (e) => {
-                isDrawing = true;
-                const rect = canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-            };
-            
-            canvas.addEventListener('mousedown', startDrawing);
-            canvas.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                startDrawing(e.touches[0]);
-            });
-            
-            canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                draw(e.touches[0]);
-            });
-            
-            const stopDrawing = () => isDrawing = false;
-            canvas.addEventListener('mouseup', stopDrawing);
-            canvas.addEventListener('touchend', stopDrawing);
-            
-            // Кнопки управления
-            document.getElementById('clear').addEventListener('click', () => {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-            });
-            
-            document.getElementById('save').addEventListener('click', () => {
-                canvas.toBlob(blob => {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        tgWebApp.sendData(reader.result);
-                        tgWebApp.close();
-                    };
-                    reader.readAsDataURL(blob);
-                }, 'image/png', 0.9);
-            });
-        }
-
-        // Запуск приложения
-        resizeCanvas();
-        initEvents();
-        window.addEventListener('resize', resizeCanvas);
+        init();
     </script>
 </body>
 </html>
