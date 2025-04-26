@@ -2,57 +2,74 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- Критически важный тег -->
-    <meta name="telegram-web-app-bot-integration" content="true">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Telegram Рисовалка</title>
     <style>
-        body { margin:0; padding:0; overflow:hidden; background:#fff; }
-        canvas { display:block; width:100vw; height:100vh; touch-action:none; }
+        body { margin: 0; padding: 0; }
+        canvas { 
+            display: block; 
+            background: white; 
+            touch-action: none; 
+        }
+        button { 
+            padding: 10px; 
+            margin: 10px; 
+            font-size: 16px; 
+        }
     </style>
 </head>
 <body>
-    <canvas id="canvas"></canvas>
+    <canvas id="drawingCanvas"></canvas>
+    <button id="saveBtn">Сохранить и отправить</button>
 
     <script>
-        // Проверка, что открыто внутри Telegram WebView
-        function isTelegramWebApp() {
-            return window.Telegram && Telegram.WebApp && Telegram.WebApp.initData;
-        }
-
-        // Если открыто не в Telegram - показываем инструкцию
-        if (!isTelegramWebApp()) {
-            document.body.innerHTML = `
-                <div style="padding:20px;text-align:center;">
-                    <h2>Откройте через Telegram-бота</h2>
-                    <p>1. Перейдите в чат с ботом</p>
-                    <p>2. Нажмите кнопку "🎨 Открыть рисовалку"</p>
-                </div>
-            `;
-            throw new Error("Open via Telegram bot only");
-        }
-
-        // Инициализация Telegram WebApp
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
-        Telegram.WebApp.setHeaderColor("#0088cc");
-        Telegram.WebApp.setBackgroundColor("#ffffff");
-
-        // Остальной код рисовалки...
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
-        
-        // Настройка canvas и обработчиков событий
-        function init() {
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = window.innerWidth * dpr;
-            canvas.height = window.innerHeight * dpr;
-            ctx.scale(dpr, dpr);
-            
-            // Добавьте здесь код рисования...
+        let isDrawing = false;
+
+        // Настройка холста под размер экрана
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 50; // Оставляем место для кнопки
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Рисование
+        canvas.addEventListener('pointerdown', startDrawing);
+        canvas.addEventListener('pointermove', draw);
+        canvas.addEventListener('pointerup', stopDrawing);
+        canvas.addEventListener('pointerout', stopDrawing);
+
+        function startDrawing(e) {
+            isDrawing = true;
+            ctx.beginPath();
+            ctx.moveTo(e.clientX, e.clientY - canvas.offsetTop);
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#000000';
+            ctx.lineCap = 'round';
         }
 
-        init();
+        function draw(e) {
+            if (!isDrawing) return;
+            ctx.lineTo(e.clientX, e.clientY - canvas.offsetTop);
+            ctx.stroke();
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        // Отправка в Telegram
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            const dataURL = canvas.toDataURL('image/png');
+            Telegram.WebApp.sendData(dataURL); // Отправляем изображение в бота
+            Telegram.WebApp.close(); // Закрываем Web App
+        });
+
+        // Инициализация WebApp Telegram
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand(); // Раскрываем на весь экран
     </script>
 </body>
 </html>
