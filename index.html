@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="telegram-web-app-bot-integration" content="true">
     <title>Telegram Рисовалка</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; }
+        body { margin: 0; padding: 0; }
         canvas { 
             display: block; 
             background: white;
@@ -33,7 +34,7 @@
     <canvas id="drawingCanvas"></canvas>
     <div class="controls">
         <button id="clearBtn">Очистить</button>
-        <button id="saveBtn">Сохранить в Telegram</button>
+        <button id="saveBtn">Сохранить в чат</button>
     </div>
 
     <script>
@@ -43,64 +44,91 @@
         
         // Настройка холста
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight - 60;
+            const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
+            canvas.width = size;
+            canvas.height = size;
             redraw();
         }
         
         function redraw() {
-            // Можно добавить сохранение состояния рисунка
+            // Очищаем и перерисовываем (можно добавить сохранение состояния)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-        
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
-        
-        // Рисование
-        canvas.addEventListener('pointerdown', startDrawing);
-        canvas.addEventListener('pointermove', draw);
-        canvas.addEventListener('pointerup', stopDrawing);
-        canvas.addEventListener('pointerout', stopDrawing);
-        
-        function startDrawing(e) {
-            isDrawing = true;
-            ctx.beginPath();
-            ctx.moveTo(e.clientX, e.clientY - canvas.offsetTop);
-            ctx.lineWidth = 5;
-            ctx.strokeStyle = '#000000';
-            ctx.lineCap = 'round';
-        }
-        
-        function draw(e) {
-            if (!isDrawing) return;
-            ctx.lineTo(e.clientX, e.clientY - canvas.offsetTop);
-            ctx.stroke();
-        }
-        
-        function stopDrawing() {
-            isDrawing = false;
-        }
-        
-        // Кнопки управления
-        document.getElementById('clearBtn').addEventListener('click', () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        });
-        
-        document.getElementById('saveBtn').addEventListener('click', () => {
-            const dataURL = canvas.toDataURL('image/png');
-            
-            // Отправка в Telegram
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.sendData(dataURL);
-            } else {
-                alert("Откройте в Telegram для сохранения!");
-            }
-        });
         
         // Инициализация Telegram WebApp
-        if (window.Telegram && Telegram.WebApp) {
-            Telegram.WebApp.ready();
-            Telegram.WebApp.expand();
+        function initTelegram() {
+            if (window.Telegram && Telegram.WebApp) {
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
+                Telegram.WebApp.setHeaderColor("#0088cc");
+                Telegram.WebApp.setBackgroundColor("#ffffff");
+                return true;
+            }
+            return false;
         }
+        
+        // Рисование
+        function setupDrawing() {
+            canvas.addEventListener('pointerdown', startDrawing);
+            canvas.addEventListener('pointermove', draw);
+            canvas.addEventListener('pointerup', stopDrawing);
+            canvas.addEventListener('pointerout', stopDrawing);
+            
+            function startDrawing(e) {
+                isDrawing = true;
+                ctx.beginPath();
+                const rect = canvas.getBoundingClientRect();
+                ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+                ctx.lineWidth = 5;
+                ctx.strokeStyle = '#000000';
+                ctx.lineCap = 'round';
+            }
+            
+            function draw(e) {
+                if (!isDrawing) return;
+                const rect = canvas.getBoundingClientRect();
+                ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+                ctx.stroke();
+            }
+            
+            function stopDrawing() {
+                isDrawing = false;
+            }
+        }
+        
+        // Управление
+        function setupControls() {
+            document.getElementById('clearBtn').addEventListener('click', () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+            
+            document.getElementById('saveBtn').addEventListener('click', () => {
+                const dataURL = canvas.toDataURL('image/png');
+                
+                if (initTelegram()) {
+                    Telegram.WebApp.sendData(dataURL);
+                    Telegram.WebApp.close();
+                } else {
+                    alert("Пожалуйста, используйте мини-приложение в Telegram");
+                }
+            });
+        }
+        
+        // Инициализация
+        function init() {
+            resizeCanvas();
+            setupDrawing();
+            setupControls();
+            window.addEventListener('resize', resizeCanvas);
+            
+            if (!initTelegram()) {
+                document.body.style.backgroundColor = "#f0f0f0";
+                alert("Для лучшего опыта откройте в Telegram");
+            }
+        }
+        
+        init();
     </script>
 </body>
 </html>
