@@ -6,171 +6,127 @@
     <meta name="telegram-web-app-bot-integration" content="true">
     <title>Telegram Рисовалка</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            touch-action: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-        canvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-            background: white;
-            touch-action: none;
-        }
-        .controls {
-            position: fixed;
-            bottom: 20px;
-            left: 0;
-            right: 0;
-            display: flex;
-            justify-content: space-around;
-        }
-        button {
-            padding: 12px 24px;
-            background: #0088cc;
-            color: white;
-            border: none;
-            border-radius: 25px;
-            font-size: 16px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
+        body { margin:0; padding:0; overflow:hidden; background:#fff; }
+        canvas { display:block; width:100vw; height:100vh; touch-action:none; }
+        .controls { position:fixed; bottom:20px; left:0; right:0; display:flex; justify-content:center; gap:15px; }
+        button { padding:12px 25px; background:#0088cc; color:#fff; border:none; border-radius:25px; font-size:16px; }
     </style>
 </head>
 <body>
-    <canvas id="drawingCanvas"></canvas>
+    <canvas id="canvas"></canvas>
     <div class="controls">
-        <button id="clearBtn">Очистить</button>
-        <button id="saveBtn">Сохранить</button>
+        <button id="clear">Очистить</button>
+        <button id="save">Сохранить</button>
     </div>
 
     <script>
-        // Инициализация Telegram WebApp
-        const tgWebApp = window.Telegram?.WebApp;
-        if (tgWebApp) {
-            tgWebApp.ready();
-            tgWebApp.expand();
-            tgWebApp.enableClosingConfirmation();
-            tgWebApp.setHeaderColor("#0088cc");
-            tgWebApp.setBackgroundColor("#ffffff");
+        // Проверка окружения Telegram
+        const isTelegram = () => {
+            return window.Telegram && Telegram.WebApp && Telegram.WebApp.initData;
+        };
+
+        // Блокировка открытия вне Telegram
+        if (!isTelegram()) {
+            document.body.innerHTML = `
+                <div style="padding:20px;text-align:center;">
+                    <h2>Откройте через Telegram-бота</h2>
+                    <p>Эта рисовалка работает только внутри Telegram</p>
+                </div>
+            `;
+            throw new Error("Not in Telegram");
         }
 
-        // Настройка холста
-        const canvas = document.getElementById('drawingCanvas');
-        const ctx = canvas.getContext('2d');
-        let isDrawing = false;
-        let lastX = 0;
-        let lastY = 0;
+        // Инициализация WebApp
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        Telegram.WebApp.setHeaderColor("#0088cc");
+        Telegram.WebApp.setBackgroundColor("#ffffff");
 
-        function initCanvas() {
+        // Настройка Canvas
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+        
+        function resizeCanvas() {
             const dpr = window.devicePixelRatio || 1;
             const rect = canvas.getBoundingClientRect();
-            
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
             canvas.style.width = rect.width + 'px';
             canvas.style.height = rect.height + 'px';
-            
             ctx.scale(dpr, dpr);
-            ctx.lineJoin = 'round';
-            ctx.lineCap = 'round';
+            ctx.lineJoin = ctx.lineCap = 'round';
             ctx.lineWidth = 5;
-            ctx.strokeStyle = '#000000';
-            ctx.imageSmoothingEnabled = true;
+            ctx.strokeStyle = '#000';
         }
 
         // Плавное рисование
-        function smoothDraw(x, y) {
-            if (!isDrawing) return;
-            
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            
-            lastX = x;
-            lastY = y;
-        }
-
-        // Обработчики событий
-        function startDrawing(e) {
-            isDrawing = true;
-            const rect = canvas.getBoundingClientRect();
-            lastX = e.clientX - rect.left;
-            lastY = e.clientY - rect.top;
-        }
-
         function draw(e) {
+            if (!drawing) return;
+            
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-            smoothDraw(x, y);
+            
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
         }
 
-        function stopDrawing() {
-            isDrawing = false;
-        }
+        // Обработчики событий
+        canvas.addEventListener('mousedown', (e) => {
+            drawing = true;
+            const rect = canvas.getBoundingClientRect();
+            ctx.beginPath();
+            ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', () => drawing = false);
+        canvas.addEventListener('mouseout', () => drawing = false);
+
+        // Для сенсорных устройств
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            drawing = true;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            ctx.beginPath();
+            ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        });
+
+        canvas.addEventListener('touchend', () => drawing = false);
+
+        // Кнопки управления
+        document.getElementById('clear').addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        document.getElementById('save').addEventListener('click', () => {
+            canvas.toBlob(blob => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    Telegram.WebApp.sendData(reader.result);
+                    Telegram.WebApp.close();
+                };
+                reader.readAsDataURL(blob);
+            }, 'image/png', 0.9);
+        });
 
         // Инициализация
-        function init() {
-            initCanvas();
-            window.addEventListener('resize', initCanvas);
-            
-            // Для мыши
-            canvas.addEventListener('mousedown', startDrawing);
-            canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('mouseup', stopDrawing);
-            canvas.addEventListener('mouseout', stopDrawing);
-            
-            // Для сенсорных устройств
-            canvas.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                const touch = e.touches[0];
-                const mouseEvent = new MouseEvent('mousedown', {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY
-                });
-                canvas.dispatchEvent(mouseEvent);
-            });
-            
-            canvas.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                const touch = e.touches[0];
-                const mouseEvent = new MouseEvent('mousemove', {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY
-                });
-                canvas.dispatchEvent(mouseEvent);
-            });
-            
-            canvas.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                const mouseEvent = new MouseEvent('mouseup', {});
-                canvas.dispatchEvent(mouseEvent);
-            });
-            
-            // Кнопки управления
-            document.getElementById('clearBtn').addEventListener('click', () => {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-            });
-            
-            document.getElementById('saveBtn').addEventListener('click', () => {
-                canvas.toBlob((blob) => {
-                    if (tgWebApp) {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            tgWebApp.sendData(reader.result);
-                            tgWebApp.close();
-                        };
-                        reader.readAsDataURL(blob);
-                    }
-                }, 'image/png', 0.9);
-            });
-        }
-
-        init();
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
     </script>
 </body>
 </html>
