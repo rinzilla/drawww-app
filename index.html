@@ -11,45 +11,36 @@
             padding: 0;
             overflow: hidden;
             touch-action: none;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-        }
-        #canvas-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            -webkit-tap-highlight-color: transparent;
         }
         canvas {
             display: block;
+            width: 100vw;
+            height: 100vh;
             background: white;
             touch-action: none;
         }
         .controls {
             position: fixed;
-            bottom: 10px;
+            bottom: 20px;
             left: 0;
             right: 0;
             display: flex;
             justify-content: space-around;
-            padding: 10px;
-            background: rgba(255,255,255,0.8);
         }
         button {
-            padding: 10px 20px;
+            padding: 12px 24px;
             background: #0088cc;
             color: white;
             border: none;
-            border-radius: 20px;
+            border-radius: 25px;
             font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
     </style>
 </head>
 <body>
-    <div id="canvas-container">
-        <canvas id="drawingCanvas"></canvas>
-    </div>
+    <canvas id="drawingCanvas"></canvas>
     <div class="controls">
         <button id="clearBtn">Очистить</button>
         <button id="saveBtn">Сохранить</button>
@@ -61,6 +52,7 @@
         if (tgWebApp) {
             tgWebApp.ready();
             tgWebApp.expand();
+            tgWebApp.enableClosingConfirmation();
             tgWebApp.setHeaderColor("#0088cc");
             tgWebApp.setBackgroundColor("#ffffff");
         }
@@ -72,53 +64,49 @@
         let lastX = 0;
         let lastY = 0;
 
-        function resizeCanvas() {
-            const width = window.innerWidth;
-            const height = window.innerHeight;
+        function initCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
             
-            // Учет масштабирования экрана
-            const scale = window.devicePixelRatio || 1;
-            canvas.width = width * scale;
-            canvas.height = height * scale;
-            canvas.style.width = width + 'px';
-            canvas.style.height = height + 'px';
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
             
-            ctx.scale(scale, scale);
+            ctx.scale(dpr, dpr);
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
             ctx.lineWidth = 5;
             ctx.strokeStyle = '#000000';
+            ctx.imageSmoothingEnabled = true;
         }
 
-        // Корректное получение позиции касания
-        function getTouchPos(canvasDom, touchEvent) {
-            const rect = canvasDom.getBoundingClientRect();
-            const scaleX = canvasDom.width / rect.width;
-            const scaleY = canvasDom.height / rect.height;
+        // Плавное рисование
+        function smoothDraw(x, y) {
+            if (!isDrawing) return;
             
-            return {
-                x: (touchEvent.clientX - rect.left) * scaleX,
-                y: (touchEvent.clientY - rect.top) * scaleY
-            };
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            lastX = x;
+            lastY = y;
         }
 
         // Обработчики событий
         function startDrawing(e) {
             isDrawing = true;
-            const pos = getTouchPos(canvas, e);
-            [lastX, lastY] = [pos.x, pos.y];
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
+            const rect = canvas.getBoundingClientRect();
+            lastX = e.clientX - rect.left;
+            lastY = e.clientY - rect.top;
         }
 
         function draw(e) {
-            if (!isDrawing) return;
-            e.preventDefault();
-            
-            const pos = getTouchPos(canvas, e);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            [lastX, lastY] = [pos.x, pos.y];
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            smoothDraw(x, y);
         }
 
         function stopDrawing() {
@@ -127,8 +115,8 @@
 
         // Инициализация
         function init() {
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
+            initCanvas();
+            window.addEventListener('resize', initCanvas);
             
             // Для мыши
             canvas.addEventListener('mousedown', startDrawing);
@@ -139,15 +127,29 @@
             // Для сенсорных устройств
             canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                startDrawing(e.touches[0]);
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent('mousedown', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                canvas.dispatchEvent(mouseEvent);
             });
             
             canvas.addEventListener('touchmove', (e) => {
                 e.preventDefault();
-                draw(e.touches[0]);
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent('mousemove', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                canvas.dispatchEvent(mouseEvent);
             });
             
-            canvas.addEventListener('touchend', stopDrawing);
+            canvas.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                const mouseEvent = new MouseEvent('mouseup', {});
+                canvas.dispatchEvent(mouseEvent);
+            });
             
             // Кнопки управления
             document.getElementById('clearBtn').addEventListener('click', () => {
@@ -155,13 +157,16 @@
             });
             
             document.getElementById('saveBtn').addEventListener('click', () => {
-                const dataURL = canvas.toDataURL('image/png');
-                if (tgWebApp) {
-                    tgWebApp.sendData(dataURL);
-                    tgWebApp.close();
-                } else {
-                    alert("Для сохранения откройте в Telegram");
-                }
+                canvas.toBlob((blob) => {
+                    if (tgWebApp) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            tgWebApp.sendData(reader.result);
+                            tgWebApp.close();
+                        };
+                        reader.readAsDataURL(blob);
+                    }
+                }, 'image/png', 0.9);
             });
         }
 
